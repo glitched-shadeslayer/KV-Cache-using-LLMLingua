@@ -1,5 +1,5 @@
 #!pip install transformers==4.41.2
-# Important to install that transformer version, unles it occur error
+# Important to install above transformer version, unless error occurs
 #See link: https://github.com/THUDM/CogVLM2/issues/181#issuecomment-2381807778
 
 # !pip install sentencepiece datasets evaluate
@@ -14,7 +14,8 @@ from datasets import load_dataset
 from tqdm.notebook import tqdm 
 import numpy as np
 from sklearn.metrics import f1_score
-
+#from LLMLingua.experiments.llmlingua2.evaluation.metrics import qa_f1_score
+from metrics import qa_f1_score
 if 'model' in globals():
     del model 
 torch.cuda.empty_cache()
@@ -26,6 +27,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 print('cuda is',torch.cuda.is_available()) 
 #################################################
 # 3 model & dataset 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ChatGLM-6B
 model = AutoModel.from_pretrained(
@@ -34,13 +36,13 @@ model = AutoModel.from_pretrained(
     torch_dtype=torch.float16,
     device_map="auto",
     use_cache=True
-).cuda()
+).to(device)
 
 model=model.eval()
 #print('model config is:',model.generation_config)
 
 ####################################################
-tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm2-6b-32k", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm2-6b-32k", trust_remote_code=True)#.to(device)
 
 
 ####################################################
@@ -64,10 +66,9 @@ data = load_dataset("THUDM/LongBench", dataset_name, split="test", cache_dir="cu
 #RANDOM token PRUNE
 def random_prune(text, compression_ratio=0.5):
 
-    tokens = tokenizer.tokenize(text)  # e.g., ["The", " quick", " brown"...]
+    tokens = tokenizer.tokenize(text).to(device)  # e.g., ["The", " quick", " brown"...]
     
-    num_keep = int(len(tokens) * (1 - compression_ratio))  # 50% compression → keep 50%
-    #num_keep = max(1, int(len(tokens) * (1 - compression_ratio)))  # Ensure at least 1 token remains
+    num_keep = int(len(tokens) * (compression_ratio)) # compression ratio means remaining 
     
     # Step 3: Randomly pick tokens (like lottery balls)
     kept_indices = sorted(  # Maintain original order
@@ -88,10 +89,11 @@ def random_prune(text, compression_ratio=0.5):
 
 from llmlingua import PromptCompressor
 
-# def compress_with_llmlingua(context, ratio=0.5):
-#     compressor = PromptCompressor()
-#     compressed_context = compressor.compress_prompt(context, rate=ratio)
-#     return compressed_context
+def compress_with_llmlingua(context, ratio=0.5):
+    compressor = PromptCompressor().to(device)
+    compressed_context = compressor.compress_prompt(context, rate=ratio,device=device)
+    # compressed_context = compressor.compress_prompt_llmlingua2(context, rate=ratio)
+    return compressed_context
 
 # #  Using gpu
 # def compress_with_llmlingua(context, ratio=0.5):
@@ -113,6 +115,31 @@ from llmlingua import PromptCompressor
 
 ##############################################################################
 # Any summarizer
+from transformers import BartForConditionalGeneration, BartTokenizer
+def compress_with_bart(context, ratio=0.5):
+    model= BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn').to(device)
+    tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+    inputs = tokenizer(
+        context, 
+        return_tensors="pt", 
+        truncation=True, 
+        max_length=1024
+    ).to(device)
+    # Calculate target length based on ratio
+    input_length = inputs['input_ids'].shape[1]
+    target_length = int(input_length * ratio)
+    
+    # Generate summary
+    summary_ids = model.generate(
+        inputs.input_ids,
+        num_beams=4,
+        max_length=target_length,
+        min_length=max(target_length - 100, 50),  # Keep min_length within bounds
+        length_penalty=2.0,
+        early_stopping=True
+    )
+    
+    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 # pip install bert-extractive-summarizer==0.4.2 <- compatitable with transformer 4.41.2
 
 # from gensim.summarization import summarize
@@ -153,20 +180,32 @@ def no_pruning(context: str) -> str:
 
 ################################################################################
 # from sklearn.metrics import f1_score
+from collections import Counter
 
-def compute_f1(reference, prediction):
+def compute_f1(reference, prediction, **kwargs):
     """ Compute F1 score for answer evaluation """
-    ref_tokens = set(reference.split())
-    pred_tokens = set(prediction.split())
-
-    common_tokens =ref_tokens&pred_tokens
-    precision=len(common_tokens)/len(pred_tokens) if pred_tokens else 0
-    recall=len(common_tokens)/len(ref_tokens) if ref_tokens else 0
-
-    if precision+ recall == 0:
-        return 0.0
+    common=Counter(prediction) & Counter(reference)
+    num_same=sum(common.values())
+    if num_same==0:
+        return 0
+    precision=1.0*num_same/len(prediction)
+    recall=1.0*num_same/len(reference)
 
     return 2 *(precision * recall) / (precision + recall)
+
+# def compute_f1(reference, prediction):
+#     """ Compute F1 score for answer evaluation """
+#     ref_tokens = set(reference.split())
+#     pred_tokens = set(prediction.split())
+
+#     common_tokens =ref_tokens&pred_tokens
+#     precision=len(common_tokens)/len(pred_tokens) if pred_tokens else 0
+#     recall=len(common_tokens)/len(ref_tokens) if ref_tokens else 0
+
+#     if precision+ recall == 0:
+#         return 0.0
+
+#     return 2 *(precision * recall) / (precision + recall)
 
 # def measure_latency(func, *args):
 #     start = time.time()
@@ -184,15 +223,14 @@ def evaluate(data, compression_func, ratio=None):
     memory_usages = []
     peak_memory_usages = []
     
-    for idx in range(10):  # Test on 10 examples
-    #for idx in range(len(data)):
+    #for idx in range(10):  # Test on 10 examples
+    for idx in range(len(data)):  # Test on all examples
         example = data[idx] 
         #print(type(example))
         #print(example)
         context = example["context"]
         question = example["input"]
         answers =example["answers"][0]
-
         if ratio is not None:
             compressed_context = compression_func(context, ratio)
         else:
@@ -219,19 +257,20 @@ def evaluate(data, compression_func, ratio=None):
         
         # Calculate F1 score
         #f1 = f1_score([answers], [response], average="macro")  # Stored f1score function is not appropritate
-        f1=compute_f1(answers, response)
+        #f1=compute_f1(answers, response)
+        f1 = qa_f1_score(prediction=response, ground_truth=answers)
         f1_scores.append(f1)
         latencies.append(latency)
         memory_usages.append(memory)
         peak_memory_usages.append(peak_memory)
 
         # print(f"Response: {response}")
-        # print(f"F1 Score: {f1:.4f}, Latency: {latency:.3f}s, Memory: {memory:.2f}MB\n")
+        # print(f"F1 Score: {f1:.2f}, Latency: {latency:.2f}s, Memory: {memory:.2f}MB\n")
     
     return {
         "avg_f1": np.mean(f1_scores),
         "avg_latency": np.mean(latencies),
-        "avg_memory": np.mean(memory_usages),
+        #"avg_memory": np.mean(memory_usages),
         "avg_peak_memory": np.mean(peak_memory_usages)
     }
 #####################################################################################
@@ -246,43 +285,37 @@ def log_result(message):
         
         
 ####################################################    
-# Evaluate no pruning (full context)
-full_context_results = evaluate(data, no_pruning)
-print("\n=== No Pruning (Full Context) ===")
-print(f"F1: {full_context_results['avg_f1']:.2f}, Latency: {full_context_results['avg_latency']:.2f}s, Memory: {full_context_results['avg_memory']:.2f} MB, Peak Memory: {full_context_results['avg_peak_memory']:.2f} MB")
-log_result("\n=== No Pruning (Full Context) ===")
-log_result(f"F1: {full_context_results['avg_f1']:.2f}, Latency: {full_context_results['avg_latency']:.2f}s, Memory: {full_context_results['avg_memory']:.2f} MB, Peak Memory: {full_context_results['avg_peak_memory']:.2f} MB")
+pruning_ratios = [0.5, 0.6, 0.7]
 
-
-pruning_ratios = [0.1, 0.3, 0.5, 0.7]
-
-# for ratio in pruning_ratios:
-#     bert_results = evaluate(data, compress_with_bert, ratio=ratio)
-#     print(f"\n=== Bert Compression ({int(ratio*100)}%) ===")
-#     print(f"F1: {bert_results['avg_f1']:.2f}, Latency: {bert_results['avg_latency']:.2f}s, Memory: {bert_results['avg_memory']:.2f} MB")
-#     log_result(f"\n=== Bert Compression ({int(ratio*100)}%) ===")
-#     log_result(f"F1: {bert_results['avg_f1']:.2f}, Latency: {bert_results['avg_latency']:.2f}s, Memory: {bert_results['avg_memory']:.2f} MB")
-
-# for ratio in pruning_ratios:
-#     textrank_results = evaluate(data, compress_with_textrank, ratio=ratio)
-#     print(f"\n=== Text Rank Compression ({int(ratio*100)}%) ===")
-#     print(f"F1: {textrank_results['avg_f1']:.2f}, Latency: {textrank_results['avg_latency']:.2f}s, Memory: {textrank_results['avg_memory']:.2f} MB, Peak Memory: {textrank_results['avg_peak_memory']:.2f} MB")
-#     log_result(f"\n=== Text Rank Compression ({int(ratio*100)}%) ===")
-#     log_result(f"F1: {textrank_results['avg_f1']:.2f}, Latency: {textrank_results['avg_latency']:.2f}s, Memory: {textrank_results['avg_memory']:.2f} MB, Peak Memory: {textrank_results['avg_peak_memory']:.2f} MB")
-
-
-# for ratio in pruning_ratios:
-#     lingua_results = evaluate(data, compress_with_llmlingua, ratio=ratio)
+for ratio in pruning_ratios:
+    bart_results = evaluate(data, compress_with_bart, ratio=ratio)
     
-#     print(f"\n=== llmlingua compression ({int(ratio*100)}%) ===")
-#     print(f"F1: {lingua_results['avg_f1']:.2f}, Latency: {lingua_results['avg_latency']:.2f}s, Memory: {lingua_results['avg_memory']:.2f} MB, Peak Memory: {lingua_results['avg_peak_memory']:.2f} MB")
-#     log_result(f"\n=== llmlingua compression ({int(ratio*100)}%) ===")
-#     log_result(f"F1: {lingua_results['avg_f1']:.2f}, Latency: {lingua_results['avg_latency']:.2f}s, Memory: {lingua_results['avg_memory']:.2f} MB, Peak Memory: {lingua_results['avg_peak_memory']:.2f} MB")
+    print(f"\n=== bart compression ({int(ratio*100)}%) ===")
+    print(f"F1: {bart_results['avg_f1']:.2f}, Latency: {bart_results['avg_latency']:.2f}s,  Peak Memory: {bart_results['avg_peak_memory']:.2f} MB")
+    log_result(f"\n=== bart compression ({int(ratio*100)}%) ===")
+    log_result(f"F1: {bart_results['avg_f1']:.2f}, Latency: {bart_results['avg_latency']:.2f}s,  Peak Memory: {bart_results['avg_peak_memory']:.2f} MB")
+        
+
+for ratio in pruning_ratios:
+    lingua_results = evaluate(data, compress_with_llmlingua, ratio=ratio)
+    
+    print(f"\n=== llmlingua compression ({int(ratio*100)}%) ===")
+    print(f"F1: {lingua_results['avg_f1']:.2f}, Latency: {lingua_results['avg_latency']:.2f}s,  Peak Memory: {lingua_results['avg_peak_memory']:.2f} MB")
+    log_result(f"\n=== llmlingua compression ({int(ratio*100)}%) ===")
+    log_result(f"F1: {lingua_results['avg_f1']:.2f}, Latency: {lingua_results['avg_latency']:.2f}s,  Peak Memory: {lingua_results['avg_peak_memory']:.2f} MB")
         
 for ratio in pruning_ratios:
     random_pruning_results = evaluate(data, random_prune, ratio=ratio)
     
     print(f"\n=== Random Token Pruning ({int(ratio*100)}%) ===")
-    print(f"F1: {random_pruning_results['avg_f1']:.2f}, Latency: {random_pruning_results['avg_latency']:.2f}s, Memory: {random_pruning_results['avg_memory']:.2f} MB, Peak Memory: {random_pruning_results['avg_peak_memory']:.2f} MB")
+    print(f"F1: {random_pruning_results['avg_f1']:.2f}, Latency: {random_pruning_results['avg_latency']:.2f}s, Peak Memory: {random_pruning_results['avg_peak_memory']:.2f} MB")
     log_result(f"\n=== Random Token Pruning ({int(ratio*100)}%) ===")
-    log_result(f"F1: {random_pruning_results['avg_f1']:.2f}, Latency: {random_pruning_results['avg_latency']:.2f}s, Memory: {random_pruning_results['avg_memory']:.2f} MB, Peak Memory: {random_pruning_results['avg_peak_memory']:.2f} MB")
+    log_result(f"F1: {random_pruning_results['avg_f1']:.2f}, Latency: {random_pruning_results['avg_latency']:.2f}s, Peak Memory: {random_pruning_results['avg_peak_memory']:.2f} MB")
+
+
+# Evaluate no pruning (full context)
+full_context_results = evaluate(data, no_pruning)
+print("\n=== No Pruning (Full Context) ===")
+print(f"F1: {full_context_results['avg_f1']:.2f}, Latency: {full_context_results['avg_latency']:.2f}s,  Peak Memory: {full_context_results['avg_peak_memory']:.2f} MB")
+log_result("\n=== No Pruning (Full Context) ===")
+log_result(f"F1: {full_context_results['avg_f1']:.2f}, Latency: {full_context_results['avg_latency']:.2f}s, Peak Memory: {full_context_results['avg_peak_memory']:.2f} MB")

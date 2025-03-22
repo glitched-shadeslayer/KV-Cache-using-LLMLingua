@@ -1,9 +1,0 @@
-
-=== llmlingua compression (50%) ===
-F1: 0.20, Latency: 1.13s,  Peak Memory: 12340.50 MB
-
-=== llmlingua compression (60%) ===
-F1: 0.23, Latency: 1.30s,  Peak Memory: 12470.63 MB
-
-=== llmlingua compression (70%) ===
-F1: 0.28, Latency: 1.41s,  Peak Memory: 12745.41 MB

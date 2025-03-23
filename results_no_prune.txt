@@ -1,0 +1,12 @@
+
+===multifieldqa_en No Pruning (Full Context) ===
+F1: 0.44, Latency: 3.75s, Peak Memory: 13274.23 MB
+
+===hotpotqa No Pruning (Full Context) ===
+F1: 0.48, Latency: 5.45s, Peak Memory: 14430.83 MB
+
+===triviaqa No Pruning (Full Context) ===
+F1: 0.41, Latency: 5.37s, Peak Memory: 14251.10 MB
+
+===narrativeqa No Pruning (Full Context) ===
+F1: 0.17, Latency: 11.71s, Peak Memory: 16259.87 MB

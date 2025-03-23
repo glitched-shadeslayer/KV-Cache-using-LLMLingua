@@ -1,0 +1,36 @@
+
+===multifieldqa_en Random Token Pruning (25%) ===
+F1: 0.13, Latency: 0.78s, Peak Memory: 12282.26 MB
+
+===multifieldqa_en Random Token Pruning (50%) ===
+F1: 0.20, Latency: 1.13s, Peak Memory: 12607.54 MB
+
+===multifieldqa_en Random Token Pruning (75%) ===
+F1: 0.30, Latency: 1.49s, Peak Memory: 12937.04 MB
+
+===hotpotqa Random Token Pruning (25%) ===
+F1: 0.21, Latency: 0.66s, Peak Memory: 12573.86 MB
+
+===hotpotqa Random Token Pruning (50%) ===
+F1: 0.29, Latency: 1.26s, Peak Memory: 13187.23 MB
+
+===hotpotqa Random Token Pruning (75%) ===
+F1: 0.39, Latency: 1.93s, Peak Memory: 13805.52 MB
+
+===triviaqa Random Token Pruning (25%) ===
+F1: 0.40, Latency: 0.50s, Peak Memory: 12413.06 MB
+
+===triviaqa Random Token Pruning (50%) ===
+F1: 0.41, Latency: 1.87s, Peak Memory: 12948.16 MB
+
+===triviaqa Random Token Pruning (75%) ===
+F1: 0.42, Latency: 2.93s, Peak Memory: 13487.02 MB
+
+===narrativeqa Random Token Pruning (25%) ===
+F1: 0.09, Latency: 2.24s, Peak Memory: 12844.84 MB
+
+===narrativeqa Random Token Pruning (50%) ===
+F1: 0.12, Latency: 4.38s, Peak Memory: 14323.06 MB
+
+===narrativeqa Random Token Pruning (75%) ===
+F1: 0.16, Latency: 9.04s, Peak Memory: 15366.91 MB

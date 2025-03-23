@@ -1,0 +1,35 @@
+===20 samples multifieldqa_en  llmlingua compression (25%) ===
+F1: 0.19, Latency: 2.47s,  Peak Memory: 14417.95 MB
+
+===20 samples multifieldqa_en  llmlingua compression (50%) ===
+F1: 0.27, Latency: 17.86s,  Peak Memory: 14752.85 MB
+
+===20 samples multifieldqa_en  llmlingua compression (75%) ===
+F1: 0.38, Latency: 1.41s,  Peak Memory: 15072.73 MB
+
+===20 samples hotpotqa  llmlingua compression (25%) ===
+F1: 0.30, Latency: 0.70s,  Peak Memory: 14749.06 MB
+
+===20 samples hotpotqa  llmlingua compression (50%) ===
+F1: 0.35, Latency: 1.25s,  Peak Memory: 15346.20 MB
+
+===20 samples hotpotqa  llmlingua compression (75%) ===
+F1: 0.38, Latency: 1.92s,  Peak Memory: 15934.34 MB
+
+===20 samples triviaqa  llmlingua compression (25%) ===
+F1: 0.42, Latency: 0.70s,  Peak Memory: 14769.61 MB
+
+===20 samples triviaqa  llmlingua compression (50%) ===
+F1: 0.40, Latency: 1.20s,  Peak Memory: 15281.46 MB
+
+===20 samples triviaqa  llmlingua compression (75%) ===
+F1: 0.41, Latency: 1.78s,  Peak Memory: 15789.83 MB
+
+===20 samples narrativeqa  llmlingua compression (25%) ===
+F1: 0.21, Latency: 9.47s,  Peak Memory: 17819.50 MB
+
+===20 samples narrativeqa  llmlingua compression (50%) ===
+F1: 0.21, Latency: 9.68s,  Peak Memory: 17819.39 MB
+
+===20 samples narrativeqa  llmlingua compression (75%) ===
+F1: 0.21, Latency: 9.04s,  Peak Memory: 17819.39 MB
